@@ -11,9 +11,8 @@
   "dependencies": {
     "canvas-confetti": "^1.9.4",
     "next": "14.2.35",
+    "@supabase/supabase-js": "^2.49.4",
     "next-auth": "^4.24.14",
-    "pusher": "^5.3.3",
-    "pusher-js": "^8.5.0",
     "react": "^18",
     "react-dom": "^18",
     "uuid": "^14.0.0"

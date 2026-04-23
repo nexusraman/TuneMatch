@@ -9,20 +9,19 @@ export async function POST(
 ) {
   const { slot, trackId, liked, trackData } = await req.json();
 
-  const room = getRoom(params.id);
+  const room = await getRoom(params.id);
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
   const swipesKey = slot === "A" ? "swipesA" : "swipesB";
   const updatedSwipes = { ...room[swipesKey], [trackId]: liked };
 
-  updateRoom(params.id, { [swipesKey]: updatedSwipes });
-  const updatedRoom = getRoom(params.id)!;
+  await updateRoom(params.id, { [swipesKey]: updatedSwipes });
+  const updatedRoom = (await getRoom(params.id))!;
 
   const otherSwipes = slot === "A" ? updatedRoom.swipesB : updatedRoom.swipesA;
 
   let matched = false;
 
-  // Check if both swiped right
   if (liked && otherSwipes[trackId] === true) {
     matched = true;
 
@@ -36,9 +35,8 @@ export async function POST(
     };
 
     const newMatches = [...updatedRoom.matches, matchedSong];
-    updateRoom(params.id, { matches: newMatches });
+    await updateRoom(params.id, { matches: newMatches });
 
-    // Add to Spotify playlist
     if (updatedRoom.playlistId) {
       const token = updatedRoom.userA?.accessToken;
       if (token) {
@@ -48,7 +46,7 @@ export async function POST(
       }
     }
 
-    const finalRoom = getRoom(params.id)!;
+    const finalRoom = (await getRoom(params.id))!;
     await pusherServer.trigger(roomChannel(params.id), EVENTS.MATCH, {
       song: matchedSong,
       room: getRoomSafe(finalRoom),
@@ -59,7 +57,7 @@ export async function POST(
     slot,
     trackId,
     liked,
-    room: getRoomSafe(getRoom(params.id)!),
+    room: getRoomSafe((await getRoom(params.id))!),
   });
 
   return NextResponse.json({ matched });

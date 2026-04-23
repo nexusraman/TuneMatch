@@ -6,14 +6,21 @@ import { useRouter } from "next/navigation";
 export default function Home() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function createRoom() {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/room/create", { method: "POST" });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Server error ${res.status}: ${text}`);
+      }
       const { roomId } = await res.json();
       router.push(`/room/${roomId}`);
-    } catch {
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create room");
       setLoading(false);
     }
   }
@@ -38,6 +45,10 @@ export default function Home() {
         >
           {loading ? "Creating room..." : "Create a Room"}
         </button>
+
+        {error && (
+          <p className="text-red-400 text-sm bg-red-500/10 rounded-xl px-4 py-3">{error}</p>
+        )}
 
         <p className="text-gray-500 text-sm">
           Share the link with your partner and start matching songs together

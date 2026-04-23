@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession, signIn } from "next-auth/react";
 import { useParams } from "next/navigation";
 import { getPusherClient, roomChannel, EVENTS } from "@/lib/pusher";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { SwipeCard } from "@/components/SwipeCard";
 import { MatchAnimation } from "@/components/MatchAnimation";
 import { MatchedSongsList } from "@/components/MatchedSongsList";
@@ -57,7 +58,7 @@ export default function RoomPage() {
   const [joined, setJoined] = useState(false);
   const [tab, setTab] = useState<"swipe" | "matches">("swipe");
 
-  const pusherRef = useRef<ReturnType<typeof getPusherClient> | null>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
   const hasJoinedRef = useRef(false);
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
@@ -101,45 +102,41 @@ export default function RoomPage() {
     }
   }, [session, roomId]);
 
-  // Set up Pusher
+  // Set up Supabase Realtime
   useEffect(() => {
-    const pusher = getPusherClient();
-    pusherRef.current = pusher;
-    const channel = pusher.subscribe(roomChannel(roomId));
+    const supabase = getPusherClient();
+    const channel = supabase.channel(roomChannel(roomId));
+    channelRef.current = channel;
 
-    channel.bind(EVENTS.USER_JOINED, (data: { room: RoomState }) => {
-      setRoom(data.room);
-    });
-
-    channel.bind(EVENTS.QUEUE_READY, (data: { trackIds: string[]; trackMap: Record<string, TrackData>; room: RoomState }) => {
-      setRoom(data.room);
-      setTracks(data.trackMap);
-    });
-
-    channel.bind(EVENTS.SWIPE, (data: { room: RoomState }) => {
-      setRoom(data.room);
-      // Advance when both users have swiped on the current song
-      setCurrentIdx((idx) => {
-        const trackId = data.room.songQueue[idx];
-        if (!trackId) return idx;
-        const aS = data.room.swipesA[trackId];
-        const bS = data.room.swipesB[trackId];
-        if (aS !== undefined && bS !== undefined) return idx + 1;
-        return idx;
-      });
-    });
-
-    channel.bind(EVENTS.MATCH, (data: { song: MatchedSong; room: RoomState }) => {
-      setRoom(data.room);
-      setMatchedSong(data.song);
-      setShowMatches(true);
-      setTimeout(() => setShowMatches(false), 3500);
-    });
+    channel
+      .on("broadcast", { event: EVENTS.USER_JOINED }, ({ payload }: { payload: { room: RoomState } }) => {
+        setRoom(payload.room);
+      })
+      .on("broadcast", { event: EVENTS.QUEUE_READY }, ({ payload }: { payload: { trackIds: string[]; trackMap: Record<string, TrackData>; room: RoomState } }) => {
+        setRoom(payload.room);
+        setTracks(payload.trackMap);
+      })
+      .on("broadcast", { event: EVENTS.SWIPE }, ({ payload }: { payload: { room: RoomState } }) => {
+        setRoom(payload.room);
+        setCurrentIdx((idx) => {
+          const trackId = payload.room.songQueue[idx];
+          if (!trackId) return idx;
+          const aS = payload.room.swipesA[trackId];
+          const bS = payload.room.swipesB[trackId];
+          if (aS !== undefined && bS !== undefined) return idx + 1;
+          return idx;
+        });
+      })
+      .on("broadcast", { event: EVENTS.MATCH }, ({ payload }: { payload: { song: MatchedSong; room: RoomState } }) => {
+        setRoom(payload.room);
+        setMatchedSong(payload.song);
+        setShowMatches(true);
+        setTimeout(() => setShowMatches(false), 3500);
+      })
+      .subscribe();
 
     return () => {
-      channel.unbind_all();
-      pusher.unsubscribe(roomChannel(roomId));
-      pusher.disconnect();
+      channel.unsubscribe();
     };
   }, [roomId]);
 
